@@ -13,6 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #include "lite/backends/x86/math/math_function.h"
+#include "lite/backends/x86/jit/helper.h"
+#include "lite/backends/x86/jit/kernel_base.h"
+#include "lite/backends/x86/jit/kernels.h"
 
 #ifdef PADDLE_WITH_MKLML
 #include "lite/backends/x86/mklml.h"
@@ -110,11 +113,11 @@ void set_constant(const lite::Context<Target>& context,
                   lite::Tensor* tensor,
                   float value) {
   TensorSetConstantWithTarget<Target> func(context, tensor, value);
-  //#ifdef PADDLE_WITH_CUDA
+  // #ifdef PADDLE_WITH_CUDA
   // tensor->target().apply_visitor(func);
-  //#else
+  // #else
   func();
-  //#endif
+  // #endif
 }
 
 template <typename T>
@@ -128,12 +131,19 @@ struct RowwiseAdd<lite::TargetType::kX86, T> {
     PADDLE_ENFORCE_EQ(vector.numel(), size);
     PADDLE_ENFORCE_EQ(output->dims(), in_dims);
 
-    auto in = lite::fluid::EigenMatrix<T>::From(input);
-    auto vec = lite::fluid::EigenVector<T>::Flatten(vector);
-    auto out = lite::fluid::EigenMatrix<T>::From(*output);
-
-    for (int64_t i = 0; i < in_dims[0]; ++i) {
-      out.chip(i, 0) = in.chip(i, 0) + vec;
+    auto input_data = input.data<T>();
+    auto vector_data = vector.data<T>();
+    auto output_data = output->mutable_data<T>();
+    const int M = in_dims[0];
+    const int N = in_dims[1];
+    auto compute =
+        paddle::lite::jit::KernelFuncs<paddle::lite::jit::VAddTuple<T>,
+                                       lite::fluid::CPUPlace>::Cache()
+            .At(N);
+    for (int64_t i = 0; i < M; ++i) {
+      const T* src = input_data + i * N;
+      T* dst = output_data + i * N;
+      compute(src, vector_data, dst, N);
     }
   }
 };
