@@ -227,11 +227,9 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     gru_value.gate_value,
                     frame_size * 3);
         }
-
         one_step.ht_1 = gru_value.prev_out_value;
         one_step.ht = gru_value.gate_weight;
         one_step.gates = gru_value.gate_value;
-
         ComputeHtPart1(&one_step, &attr);
 
         if (one_step.ht_1) {
