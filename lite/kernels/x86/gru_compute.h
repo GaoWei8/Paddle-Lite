@@ -228,18 +228,18 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     frame_size * 3);
         }
         one_step.ht_1 = gru_value.prev_out_value;
-        one_step.ht = gru_value.gate_weight;
+        one_step.ht = gru_value.output_value;
         one_step.gates = gru_value.gate_value;
         ComputeHtPart1(&one_step, &attr);
 
-        if (one_step.ht_1) {
+        if (gru_value.prev_out_value) {
           blas.GEMM(false,
                     false,
                     cur_batch_size,
                     frame_size,
                     frame_size,
                     1,
-                    gru_value.reset_output_value,
+                    gru_value.output_value,
                     frame_size,
                     gru_value.state_weight,
                     frame_size,
@@ -247,12 +247,8 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     gru_value.gate_value + frame_size * 2,
                     frame_size * 3);
         }
-        one_step.ht_1 = gru_value.prev_out_value;
-        one_step.ht = gru_value.gate_weight;
-        one_step.gates = gru_value.gate_value;
         ComputeHtPart2(&one_step, &attr);
 #endif
-
         gru_value.prev_out_value = gru_value.output_value;
       }
 #ifdef PADDLE_WITH_MKLML
