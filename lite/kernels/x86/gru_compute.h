@@ -119,8 +119,6 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
     size_t seq_len = batch_starts.size() - 1;
     auto active_node =
         lite::x86::math::detail::GetActivationType(param.activation);
-// auto active_gate =
-//   lite::x86::math::detail::GetActivationType(param.gate_activation);
 
 #ifdef PADDLE_WITH_MKLML
     // use MKL packed to speedup GEMM
