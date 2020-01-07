@@ -15,6 +15,8 @@
 
 #include <string>
 #include <vector>
+#include "lite/backends/x86/jit/kernel_base.h"
+#include "lite/backends/x86/jit/kernels.h"
 #include "lite/backends/x86/math/blas.h"
 #include "lite/backends/x86/math/detail/gru_cpu_kernel.h"
 #include "lite/backends/x86/math/detail/gru_kernel.h"
@@ -51,6 +53,18 @@ inline void ReorderInitState(const lite::Context<TARGET(kX86)>& context,
 template <typename T>
 class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
  public:
+#define INIT_OTHER_DEFINES                                               \
+  auto w_dims = weight->dims();                                          \
+  const int D = w_dims[0];                                               \
+  const jit::gru_attr_t attr(                                            \
+      D,                                                                 \
+      jit::to_kerneltype(context.Attr<std::string>("gate_activation")),  \
+      jit::to_kerneltype(context.Attr<std::string>("activation")));      \
+  jit::gru_t one_step;                                                   \
+  auto ComputeHtPart1 = jit::KernelFuncs<jit::GRUHtPart1Tuple<T>,        \
+                                         lite::fluid::CPUPlace>::Cache() \
+                            .At(attr);
+
   void Run() override {
     auto& context = ctx_->As<X86Context>();
     auto& param = *param_.get_mutable<operators::GRUParam>();
@@ -196,14 +210,72 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
         gru_value.gate_value = gate_t.mutable_data<T>();
         gru_value.reset_output_value = reset_hidden_prev_t.mutable_data<T>();
 
-        lite::x86::math::GRUUnitFunctor<TARGET(kX86), T>::compute(
-            context,
+//        lite::x86::math::GRUUnitFunctor<TARGET(kX86), T>::compute(
+//            context,
+//            gru_value,
+//            frame_size,
+//            cur_batch_size,
+//            active_node,
+//            active_gate,
+//            origin_mode);
+
+#ifndef __NVCC__
+        // INIT_OTHER_DEFINES;
+        auto blas =
+            lite::x86::math::GetBlas<lite::TargetType::kX86, T>(context);
+        if (gru_value.prev_out_value) {
+          blas.GEMM(false,
+                    false,
+                    cur_batch_size,
+                    frame_size * 2,
+                    frame_size,
+                    1,
+                    gru_value.prev_out_value,
+                    frame_size,
+                    gru_value.gate_weight,
+                    frame_size * 2,
+                    1,
+                    gru_value.gate_value,
+                    frame_size * 3);
+        }
+
+        //        one_step.ht_1 = gru_value.prev_out_value;
+        //        one_step.ht = gru_value.gate_weight;
+        //        one_step.gates = gru_value.gate_value;
+
+        //        ComputeHtPart1(&one_step, &attr);
+
+        lite::x86::math::detail::forward_reset_output(
+            lite::x86::math::detail::forward::gru_resetOutput<T>(),
+            gru_value,
+            frame_size,
+            cur_batch_size,
+            active_gate);
+
+        if (gru_value.prev_out_value) {
+          blas.GEMM(false,
+                    false,
+                    cur_batch_size,
+                    frame_size,
+                    frame_size,
+                    1,
+                    gru_value.reset_output_value,
+                    frame_size,
+                    gru_value.state_weight,
+                    frame_size,
+                    1,
+                    gru_value.gate_value + frame_size * 2,
+                    frame_size * 3);
+        }
+
+        lite::x86::math::detail::forward_final_output(
+            lite::x86::math::detail::forward::gru_finalOutput<T>(),
             gru_value,
             frame_size,
             cur_batch_size,
             active_node,
-            active_gate,
             origin_mode);
+#endif
 
         gru_value.prev_out_value = gru_value.output_value;
       }
