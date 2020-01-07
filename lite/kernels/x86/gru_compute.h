@@ -54,14 +54,14 @@ template <typename T>
 class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
  public:
 #define INIT_OTHER_DEFINES                                               \
-  auto w_dims = weight->dims();                                          \
-  const int D = w_dims[0];                                               \
-  const jit::gru_attr_t attr(                                            \
-      D,                                                                 \
-      jit::to_kerneltype(context.Attr<std::string>("gate_activation")),  \
-      jit::to_kerneltype(context.Attr<std::string>("activation")));      \
+  const jit::gru_attr_t attr(frame_size,                                 \
+                             jit::to_kerneltype(param.gate_activation),  \
+                             jit::to_kerneltype(param.activation));      \
   jit::gru_t one_step;                                                   \
   auto ComputeHtPart1 = jit::KernelFuncs<jit::GRUHtPart1Tuple<T>,        \
+                                         lite::fluid::CPUPlace>::Cache() \
+                            .At(attr);                                   \
+  auto ComputeHtPart2 = jit::KernelFuncs<jit::GRUHtPart2Tuple<T>,        \
                                          lite::fluid::CPUPlace>::Cache() \
                             .At(attr);
 
@@ -119,8 +119,8 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
     size_t seq_len = batch_starts.size() - 1;
     auto active_node =
         lite::x86::math::detail::GetActivationType(param.activation);
-    auto active_gate =
-        lite::x86::math::detail::GetActivationType(param.gate_activation);
+// auto active_gate =
+//   lite::x86::math::detail::GetActivationType(param.gate_activation);
 
 #ifdef PADDLE_WITH_MKLML
     // use MKL packed to speedup GEMM
@@ -210,17 +210,8 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
         gru_value.gate_value = gate_t.mutable_data<T>();
         gru_value.reset_output_value = reset_hidden_prev_t.mutable_data<T>();
 
-//        lite::x86::math::GRUUnitFunctor<TARGET(kX86), T>::compute(
-//            context,
-//            gru_value,
-//            frame_size,
-//            cur_batch_size,
-//            active_node,
-//            active_gate,
-//            origin_mode);
-
 #ifndef __NVCC__
-        // INIT_OTHER_DEFINES;
+        INIT_OTHER_DEFINES;
         auto blas =
             lite::x86::math::GetBlas<lite::TargetType::kX86, T>(context);
         if (gru_value.prev_out_value) {
@@ -239,20 +230,13 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     frame_size * 3);
         }
 
-        //        one_step.ht_1 = gru_value.prev_out_value;
-        //        one_step.ht = gru_value.gate_weight;
-        //        one_step.gates = gru_value.gate_value;
+        one_step.ht_1 = gru_value.prev_out_value;
+        one_step.ht = gru_value.gate_weight;
+        one_step.gates = gru_value.gate_value;
 
-        //        ComputeHtPart1(&one_step, &attr);
+        ComputeHtPart1(&one_step, &attr);
 
-        lite::x86::math::detail::forward_reset_output(
-            lite::x86::math::detail::forward::gru_resetOutput<T>(),
-            gru_value,
-            frame_size,
-            cur_batch_size,
-            active_gate);
-
-        if (gru_value.prev_out_value) {
+        if (one_step.ht_1) {
           blas.GEMM(false,
                     false,
                     cur_batch_size,
@@ -267,14 +251,10 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     gru_value.gate_value + frame_size * 2,
                     frame_size * 3);
         }
-
-        lite::x86::math::detail::forward_final_output(
-            lite::x86::math::detail::forward::gru_finalOutput<T>(),
-            gru_value,
-            frame_size,
-            cur_batch_size,
-            active_node,
-            origin_mode);
+        one_step.ht_1 = gru_value.prev_out_value;
+        one_step.ht = gru_value.gate_weight;
+        one_step.gates = gru_value.gate_value;
+        ComputeHtPart2(&one_step, &attr);
 #endif
 
         gru_value.prev_out_value = gru_value.output_value;
