@@ -53,16 +53,19 @@ inline void ReorderInitState(const lite::Context<TARGET(kX86)>& context,
 template <typename T>
 class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
  public:
-#define INIT_OTHER_DEFINES                                               \
-  const jit::gru_attr_t attr(frame_size,                                 \
-                             jit::to_kerneltype(param.gate_activation),  \
-                             jit::to_kerneltype(param.activation));      \
-  jit::gru_t one_step;                                                   \
-  auto ComputeHtPart1 = jit::KernelFuncs<jit::GRUHtPart1Tuple<T>,        \
-                                         lite::fluid::CPUPlace>::Cache() \
-                            .At(attr);                                   \
-  auto ComputeHtPart2 = jit::KernelFuncs<jit::GRUHtPart2Tuple<T>,        \
-                                         lite::fluid::CPUPlace>::Cache() \
+#define INIT_OTHER_DEFINES                                                     \
+  const jit::gru_attr_t attr(frame_size,                                       \
+                             jit::to_kerneltype(param.gate_activation),        \
+                             jit::to_kerneltype(param.activation));            \
+  jit::gru_t one_step;                                                         \
+  auto ComputeH1 =                                                             \
+      jit::KernelFuncs<jit::GRUH1Tuple<T>, lite::fluid::CPUPlace>::Cache().At( \
+          attr);                                                               \
+  auto ComputeHtPart1 = jit::KernelFuncs<jit::GRUHtPart1Tuple<T>,              \
+                                         lite::fluid::CPUPlace>::Cache()       \
+                            .At(attr);                                         \
+  auto ComputeHtPart2 = jit::KernelFuncs<jit::GRUHtPart2Tuple<T>,              \
+                                         lite::fluid::CPUPlace>::Cache()       \
                             .At(attr);
 
   void Run() override {
@@ -73,6 +76,7 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
     bool is_reverse = param.is_reverse;
 
     auto* input = param.input;
+    auto* input_data = input->mutable_data<T>();
     auto* h0 = param.h0;
     auto* weight = param.weight;
     const T* weight_data = weight->data<T>();
@@ -98,12 +102,17 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
     }
 
     int frame_size = hidden_dims[1];
+    INIT_OTHER_DEFINES;
     lite::x86::math::GRUMetaValue<T> gru_value;
     gru_value.gate_weight = const_cast<T*>(weight_data);
     gru_value.state_weight =
         const_cast<T*>(weight_data + 2 * frame_size * frame_size);
     Tensor ordered_h0;
-
+    Tensor* out;
+    auto out_data = out->mutable_data<T>();
+    auto batched_lod = input->lod();
+    const auto& seq_order = batched_lod[2];
+    const int max_bs = seq_order.size();
     std::vector<size_t> order(batch_gate->lod()[2]);
 
     if (h0) {
@@ -114,6 +123,19 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
       gru_value.prev_out_value = ordered_h0.mutable_data<T>();
     } else {
       gru_value.prev_out_value = nullptr;
+
+      T* cur_in_data = input_data;
+      T* cur_out_data = out_data;
+      // W: {W_update, W_reset; W_state}
+      for (int i = 0; i < max_bs; ++i) {
+        one_step.gates = cur_in_data;
+        one_step.ht = cur_out_data;
+        ComputeH1(&one_step, &attr);
+        // add offset
+        cur_in_data += frame_size * 3;
+        cur_out_data += frame_size;
+      }
+      gru_value.prev_out_value = out_data;
     }
     auto batch_starts = batch_gate->lod()[0];
     size_t seq_len = batch_starts.size() - 1;
@@ -209,7 +231,6 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
         gru_value.reset_output_value = reset_hidden_prev_t.mutable_data<T>();
 
 #ifndef __NVCC__
-        INIT_OTHER_DEFINES;
         auto blas =
             lite::x86::math::GetBlas<lite::TargetType::kX86, T>(context);
         if (gru_value.prev_out_value) {
@@ -227,11 +248,15 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     gru_value.gate_value,
                     frame_size * 3);
         }
+        LOG(INFO) << "1";
         one_step.ht_1 = gru_value.prev_out_value;
+        LOG(INFO) << "1.1";
         one_step.ht = gru_value.output_value;
+        LOG(INFO) << "1.2";
         one_step.gates = gru_value.gate_value;
+        LOG(INFO) << "1.3";
         ComputeHtPart1(&one_step, &attr);
-
+        LOG(INFO) << "2";
         if (gru_value.prev_out_value) {
           blas.GEMM(false,
                     false,
@@ -247,9 +272,12 @@ class GRUCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
                     gru_value.gate_value + frame_size * 2,
                     frame_size * 3);
         }
+        LOG(INFO) << "3";
         ComputeHtPart2(&one_step, &attr);
+        LOG(INFO) << "4";
 #endif
         gru_value.prev_out_value = gru_value.output_value;
+        LOG(INFO) << "5";
       }
 #ifdef PADDLE_WITH_MKLML
     }
