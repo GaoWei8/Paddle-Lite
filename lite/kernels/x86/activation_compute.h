@@ -230,10 +230,11 @@ struct SoftsignFunctor : public BaseActivationFunctor<T> {
     auto out_data = out.data();
     int n = std::min(x.size(), out.size());
 
-    paddle::lite::x86::math::CBlas<T>::VABS(n, x_data, out_data);
+    // paddle::lite::x86::math::CBlas<T>::VABS(n, x_data, out_data);
     for (int i = 0; i < n; i++) {
       // out_data[i] += static_cast<T>(1);
-      out_data[i] = x_data[i] / (static_cast<T>(1) + out_data[i]);
+      out_data[i] = x_data[i] / (static_cast<T>(1) +
+                                 (x_data[i] < 0 ? (-x_data[i]) : x_data[i]));
     }
   }
 };
