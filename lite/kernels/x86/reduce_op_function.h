@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include <string>
 #include <vector>
 #include "lite/core/op_registry.h"
 #include "lite/fluid/eigen.h"
@@ -63,9 +64,16 @@ void ReduceFunctor(const lite::Tensor& input,
     auto out = EigenScalar<T>::From(output);
     functor(&x, &out, reduce_dim);
   } else {
-    auto te = strstr(typeid(Functor).name(), "SumFunctor");
-    if (D == 3 && R_D == 1 && te != NULL) {
-      lite::DDim input_dims = input.dims();
+    std::vector<std::string> func = {"SumFunctor"};
+    bool func_find = 0;
+    for (int i = 0; i < func.size(); i++) {
+      std::string fun_name = typeid(Functor).name();
+      if (fun_name.find(func[i]) != std::string::npos) {
+        func_find = 1;
+      }
+    }
+    if (D == 3 && R_D == 1 && func_find) {
+      const lite::DDim& input_dims = input.dims();
       const T* input_data = input.data<T>();
       T* output_data = output->mutable_data<T>();
       for (int i = 0; i < input_dims[0]; i++) {
