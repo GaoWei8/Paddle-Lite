@@ -52,6 +52,16 @@ struct SumFunctor {
             *input, output, dims, keep_dim);                              \
   }
 
+#define HANDLE_DIMT(NDIM, RDIM)                                             \
+  if (ndim == NDIM && rdim == RDIM) {                                       \
+    paddle::lite::kernels::x86::ReduceFunctorTensor<lite::TargetType::kX86, \
+                                                    T,                      \
+                                                    NDIM,                   \
+                                                    RDIM,                   \
+                                                    SumFunctor>(            \
+        *input, output, dims, keep_dim);                                    \
+  }
+
 template <typename T>
 class ReduceSumCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
  public:
@@ -82,7 +92,7 @@ class ReduceSumCompute : public KernelLite<TARGET(kX86), PRECISION(kFloat)> {
       HANDLE_DIM(4, 2);
       HANDLE_DIM(4, 1);
       HANDLE_DIM(3, 2);
-      HANDLE_DIM(3, 1);
+      HANDLE_DIMT(3, 1);
       HANDLE_DIM(2, 1);
       HANDLE_DIM(1, 1);
     }
