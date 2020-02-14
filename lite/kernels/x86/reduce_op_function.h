@@ -49,36 +49,38 @@ void ReduceFunctor(const lite::Tensor& input,
                    bool keep_dim) {
   Functor functor;
 
-  std::vector<std::string> func = {"SumF"};
-  for (int i = 0; i < func.size(); i++) {
-    std::string fun_name = typeid(Functor).name();
-    auto fun_find = fun_name.find(func[i]);
-    if (fun_find != std::string::npos && D == 3 && R_D == 1) {
-      const T* input_data = input.data<T>();
-      T* output_data = output->mutable_data<T>();
-      functor(input_data, output_data, input.dims(), D, R_D);
-    } else {
-      auto x = EigenTensor<T, D>::From(input);
+  //  std::vector<std::string> func = {"SumF"};
+  //  for (int i = 0; i < func.size(); i++) {
+  //    std::string fun_name = typeid(Functor).name();
+  //    auto fun_find = fun_name.find(func[i]);
+  //    if (fun_find != std::string::npos && D == 3 && R_D == 1) {
+  auto te = strstr(typeid(Functor).name(), "SumFunctor");
+  if (D == 3 && R_D == 1 && te != NULL) {
+    const T* input_data = input.data<T>();
+    T* output_data = output->mutable_data<T>();
+    functor(input_data, output_data, input.dims(), D, R_D);
+  } else {
+    auto x = EigenTensor<T, D>::From(input);
 
-      auto reduce_dim = Eigen::array<int, R_D>();
-      auto x_rank = static_cast<int>(x.dimensions().size());
-      for (size_t i = 0; i < dims.size(); ++i) {
-        if (dims[i] < 0) {
-          reduce_dim[i] = x_rank + dims[i];
-        } else {
-          reduce_dim[i] = dims[i];
-        }
-      }
-
-      if (D == 1) {
-        auto out = EigenScalar<T>::From(output);
-        functor(&x, &out, reduce_dim);
+    auto reduce_dim = Eigen::array<int, R_D>();
+    auto x_rank = static_cast<int>(x.dimensions().size());
+    for (size_t i = 0; i < dims.size(); ++i) {
+      if (dims[i] < 0) {
+        reduce_dim[i] = x_rank + dims[i];
       } else {
-        auto out = EigenTensor<T, (D - R_D)>::From(*output, output->dims());
-        functor(&x, &out, reduce_dim);
+        reduce_dim[i] = dims[i];
       }
     }
+
+    if (D == 1) {
+      auto out = EigenScalar<T>::From(output);
+      functor(&x, &out, reduce_dim);
+    } else {
+      auto out = EigenTensor<T, (D - R_D)>::From(*output, output->dims());
+      functor(&x, &out, reduce_dim);
+    }
   }
+  //}
 }
 
 }  // namespace x86

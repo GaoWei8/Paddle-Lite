@@ -13,7 +13,6 @@
 // limitations under the License.
 #pragma once
 
-#include <string>
 #include <vector>
 #include "lite/core/kernel.h"
 #include "lite/core/op_registry.h"
@@ -30,13 +29,12 @@ struct SumFunctor {
   void operator()(X* x, Y* y, const Dim& dim, size_t d, size_t r_d) {
     for (int i = 0; i < dim[0]; i++) {
       for (int k = 0; k < dim[2]; k++) {
-        int out_d = i * dim[2] + k;
         auto output_temp = x[i * dim[1] * dim[2] + k];
         for (int j = 1; j < dim[1]; j++) {
           int input_d = i * dim[1] * dim[2] + j * dim[2] + k;
           output_temp = output_temp + x[input_d];
         }
-        y[out_d] = output_temp;
+        y[i * dim[2] + k] = output_temp;
       }
     }
   }
