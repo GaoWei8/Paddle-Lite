@@ -48,14 +48,15 @@ void ReduceFunctor(const lite::Tensor& input,
                    const std::vector<int>& dims,
                    bool keep_dim) {
   Functor functor;
-  std::vector<std::string> func = {"SumFunctor"};
+
+  std::vector<std::string> func = {"SumF"};
   for (int i = 0; i < func.size(); i++) {
     std::string fun_name = typeid(Functor).name();
     auto fun_find = fun_name.find(func[i]);
     if (fun_find != std::string::npos && D == 3 && R_D == 1) {
       const T* input_data = input.data<T>();
       T* output_data = output->mutable_data<T>();
-      functor(input_data, output_data, input.dims());
+      functor(input_data, output_data, input.dims(), D, R_D);
     } else {
       auto x = EigenTensor<T, D>::From(input);
 

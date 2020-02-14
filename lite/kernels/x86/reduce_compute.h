@@ -27,25 +27,23 @@ namespace x86 {
 
 struct SumFunctor {
   template <typename X, typename Y, typename Dim>
-  void operator()(X* x, Y* y, const Dim& dim) {
-    std::string fun_name = typeid(X).name();
-    LOG(INFO) << typeid(X).name();
-    auto fun_find = fun_name.find("Eigen");
-    if (fun_find == std::string::npos) {
-      for (int i = 0; i < dim[0]; i++) {
-        for (int k = 0; k < dim[2]; k++) {
-          int out_d = i * dim[2] + k;
-          auto output_temp = x[i * dim[1] * dim[2] + k];
-          for (int j = 1; j < dim[1]; j++) {
-            int input_d = i * dim[1] * dim[2] + j * dim[2] + k;
-            output_temp = output_temp + x[input_d];
-          }
-          y[out_d] = output_temp;
+  void operator()(X* x, Y* y, const Dim& dim, size_t d, size_t r_d) {
+    for (int i = 0; i < dim[0]; i++) {
+      for (int k = 0; k < dim[2]; k++) {
+        int out_d = i * dim[2] + k;
+        auto output_temp = x[i * dim[1] * dim[2] + k];
+        for (int j = 1; j < dim[1]; j++) {
+          int input_d = i * dim[1] * dim[2] + j * dim[2] + k;
+          output_temp = output_temp + x[input_d];
         }
+        y[out_d] = output_temp;
       }
-    } else {
-      y->device(lite::fluid::EigenDeviceType<TARGET(kX86)>()) = x->sum(dim);
     }
+  }
+
+  template <typename X, typename Y, typename Dim>
+  void operator()(X* x, Y* y, const Dim& dim) {
+    y->device(lite::fluid::EigenDeviceType<TARGET(kX86)>()) = x->sum(dim);
   }
 };
 
