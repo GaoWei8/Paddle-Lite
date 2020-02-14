@@ -54,7 +54,7 @@ void ReduceFunctor(const lite::Tensor& input,
   //    std::string fun_name = typeid(Functor).name();
   //    auto fun_find = fun_name.find(func[i]);
   //    if (fun_find != std::string::npos && D == 3 && R_D == 1) {
-  auto te = strstr(typeid(Functor).name(), "SumFunctor");
+  auto te = strstr(typeid(Functor).name(), "SumF");
   if (D == 3 && R_D == 1 && te != NULL) {
     const T* input_data = input.data<T>();
     T* output_data = output->mutable_data<T>();
