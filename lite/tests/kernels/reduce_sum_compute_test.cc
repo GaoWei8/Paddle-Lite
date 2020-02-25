@@ -196,7 +196,7 @@ class ReduceSumComputeTester : public arena::TestCase {
   std::vector<int> dim_{0};
   bool keep_dim_ = false;
   bool reduce_all_ = false;
-  DDim x_dims_;
+  DDim x_dims_{{3, 2, 3, 4}};
 
  public:
   ReduceSumComputeTester(const Place& place,
