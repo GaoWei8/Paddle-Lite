@@ -119,25 +119,27 @@ void reduce_sum_w(const float* src,
   }
 }
 
-void reduce_sum_c(
-    const float* src, float* dst, int channel_in, int height_in, int width_in) {
+void reduce_sum(const float* src,
+                float* dst,
+                int channel_in,
+                int height_in,
+                int width_in,
+                int dims) {
   int hw_size = height_in * width_in;
-  int data_index, src_index;
+  int data_index, src_index0, src_index;
+
   for (int h = 0; h < height_in; ++h) {
     for (int w = 0; w < width_in; ++w) {
       data_index = h * width_in + w;
+      src_index0 = n * hw_size;
       dst[data_index] = 0.0;
       for (int n = 0; n < channel_in; ++n) {
-        src_index = n * hw_size + data_index;
+        src_index = data_index + n * hw_size;
         dst[data_index] += static_cast<float>(src[src_index]);
       }
     }
   }
-}
-void reduce_sum_h(
-    const float* src, float* dst, int channel_in, int height_in, int width_in) {
-  int hw_size = height_in * width_in;
-  int data_index, src_index0, src_index;
+
   for (int c = 0; c < channel_in; ++c) {
     for (int w = 0; w < width_in; ++w) {
       data_index = c * width_in + w;
@@ -149,13 +151,7 @@ void reduce_sum_h(
       }
     }
   }
-}
-void reduce_sum_w(
-    const float* src, float* dst, int channel_in, int height_in, int width_in) {
-  int hw_size = height_in * width_in;
-  int data_index = 0;
-  int src_index0 = 0;
-  int src_index = 0;
+
   for (int c = 0; c < channel_in; ++c) {
     for (int h = 0; h < height_in; ++h) {
       data_index = c * height_in + h;
@@ -168,6 +164,7 @@ void reduce_sum_w(
     }
   }
 }
+
 void reduce_sum_all(const float* src,
                     float* dst,
                     int num_in,
@@ -345,18 +342,10 @@ class ReduceSumComputeTester : public arena::TestCase {
       int in_h = x_dims_[1];
       int in_w = x_dims_[2];
       if (dim_.size() == 1 && !reduce_all_) {
-        switch (dim_[0]) {
-          case 0:
-            reduce_sum_c(x_data, out_data, in_c, in_h, in_w);
-            break;
-          case 1:
-            reduce_sum_h(x_data, out_data, in_c, in_h, in_w);
-            break;
-          case 2:
-            reduce_sum_w(x_data, out_data, in_c, in_h, in_w);
-            break;
-          default:
-            LOG(FATAL) << "error!!!";
+        if (dim_[0] < x_dims_.size()) {
+          reduce_sum(x_data, out_data, in_c, in_h, in_w, dim_[0]);
+        } else {
+          LOG(FATAL) << "error!!!";
         }
       }
     }
