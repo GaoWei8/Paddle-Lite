@@ -119,46 +119,49 @@ void reduce_sum_w(const float* src,
   }
 }
 
-void reduce_sum(const float* src,
-                float* dst,
-                int channel_in,
-                int height_in,
-                int width_in,
-                int dims) {
-  int hw_size = height_in * width_in;
+void reduce_sum(const float* src, float* dst, DDim x_dim, int dims) {
+  int iterations[3];
+  int i_size = 0;
+  int j_size = 0;
+  int k_size = 0;
+  int index_size = 0;
+  switch (dims) {
+    case 0:
+      iterations[0] = x_dim[1];
+      iterations[1] = x_dim[2];
+      iterations[2] = x_dim[0];
+      i_size = x_dim[2];
+      j_size = 1;
+      k_size = x_dim[1] * x_dim[2];
+      index_size = x_dim[2];
+      break;
+    case 1:
+      iterations[0] = x_dim[0];
+      iterations[1] = x_dim[2];
+      iterations[2] = x_dim[1];
+      i_size = x_dim[1] * x_dim[2];
+      j_size = 1;
+      k_size = x_dim[2];
+      index_size = x_dim[2];
+      break;
+    case 2:
+      iterations[0] = x_dim[0];
+      iterations[1] = x_dim[1];
+      iterations[2] = x_dim[2];
+      i_size = x_dim[1] * x_dim[2];
+      j_size = x_dim[2];
+      k_size = 1;
+      index_size = x_dim[1];
+      break;
+  }
   int data_index, src_index0, src_index;
-
-  for (int h = 0; h < height_in; ++h) {
-    for (int w = 0; w < width_in; ++w) {
-      data_index = h * width_in + w;
-      src_index0 = n * hw_size;
+  for (int i = 0; i < iterations[0]; i++) {
+    for (int j = 0; j < iterations[1]; j++) {
+      data_index = i * index_size + j;
       dst[data_index] = 0.0;
-      for (int n = 0; n < channel_in; ++n) {
-        src_index = data_index + n * hw_size;
-        dst[data_index] += static_cast<float>(src[src_index]);
-      }
-    }
-  }
-
-  for (int c = 0; c < channel_in; ++c) {
-    for (int w = 0; w < width_in; ++w) {
-      data_index = c * width_in + w;
-      src_index0 = c * hw_size + w;
-      dst[data_index] = 0.0;
-      for (int h = 0; h < height_in; ++h) {
-        src_index = src_index0 + h * width_in;
-        dst[data_index] += static_cast<float>(src[src_index]);
-      }
-    }
-  }
-
-  for (int c = 0; c < channel_in; ++c) {
-    for (int h = 0; h < height_in; ++h) {
-      data_index = c * height_in + h;
-      src_index0 = c * hw_size + h * width_in;
-      dst[data_index] = 0.0;
-      for (int w = 0; w < width_in; ++w) {
-        src_index = src_index0 + w;
+      src_index0 = i * i_size + j * j_size;
+      for (int k = 0; k < iterations[2]; k++) {
+        src_index = src_index0 + k * k_size;
         dst[data_index] += static_cast<float>(src[src_index]);
       }
     }
@@ -338,12 +341,9 @@ class ReduceSumComputeTester : public arena::TestCase {
         }
       }
     } else {
-      int in_c = x_dims_[0];
-      int in_h = x_dims_[1];
-      int in_w = x_dims_[2];
       if (dim_.size() == 1 && !reduce_all_) {
         if (dim_[0] < x_dims_.size()) {
-          reduce_sum(x_data, out_data, in_c, in_h, in_w, dim_[0]);
+          reduce_sum(x_data, out_data, x_dims_, dim_[0]);
         } else {
           LOG(FATAL) << "error!!!";
         }
