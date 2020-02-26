@@ -120,49 +120,87 @@ void reduce_sum_w(const float* src,
 }
 
 void reduce_sum(const float* src, float* dst, DDim x_dim, int dims) {
-  int iterations[3];
-  int i_size = 0;
-  int j_size = 0;
-  int k_size = 0;
-  int index_size = 0;
+  // int iterations[3];
+  // int i_size = 0;
+  // int j_size = 0;
+  // int k_size = 0;
+  // int index_size = 0;
+  // switch (dims) {
+  //  case 0:
+  //    iterations[0] = x_dim[1];
+  //    iterations[1] = x_dim[2];
+  //    iterations[2] = x_dim[0];
+  //    i_size = x_dim[2];
+  //    j_size = 1;
+  //    k_size = x_dim[1] * x_dim[2];
+  //    index_size = x_dim[2];
+  //    break;
+  //  case 1:
+  //    iterations[0] = x_dim[0];
+  //    iterations[1] = x_dim[2];
+  //    iterations[2] = x_dim[1];
+  //    i_size = x_dim[1] * x_dim[2];
+  //    j_size = 1;
+  //    k_size = x_dim[2];
+  //    index_size = x_dim[2];
+  //    break;
+  //  case 2:
+  //    iterations[0] = x_dim[0];
+  //    iterations[1] = x_dim[1];
+  //    iterations[2] = x_dim[2];
+  //    i_size = x_dim[1] * x_dim[2];
+  //    j_size = x_dim[2];
+  //    k_size = 1;
+  //    index_size = x_dim[1];
+  //    break;
+  //}
+  // int data_index, src_index0, src_index;
+  // for (int i = 0; i < iterations[0]; i++) {
+  //  for (int j = 0; j < iterations[1]; j++) {
+  //    data_index = i * index_size + j;
+  //    dst[data_index] = 0.0;
+  //    src_index0 = i * i_size + j * j_size;
+  //    for (int k = 0; k < iterations[2]; k++) {
+  //      src_index = src_index0 + k * k_size;
+  //      dst[data_index] += static_cast<float>(src[src_index]);
+  //    }
+  //  }
+  //}
+  int reduce_b[3] = {1};
+  reduce_b[dims] = 0;
+  DDim reduce_dim{x_dim};
+  reduce_dim[dims] = 1;
+  LOG(INFO) << x_dim[0] << x_dim[1] << x_dim[0];
+  int dim_size = 0;
   switch (dims) {
     case 0:
-      iterations[0] = x_dim[1];
-      iterations[1] = x_dim[2];
-      iterations[2] = x_dim[0];
-      i_size = x_dim[2];
-      j_size = 1;
-      k_size = x_dim[1] * x_dim[2];
-      index_size = x_dim[2];
+      dim_size = x_dim[1] * x_dim[2];
+      for (int i = 0; i < dim_size; i++) {
+        dst[i] = 0.0;
+      }
       break;
     case 1:
-      iterations[0] = x_dim[0];
-      iterations[1] = x_dim[2];
-      iterations[2] = x_dim[1];
-      i_size = x_dim[1] * x_dim[2];
-      j_size = 1;
-      k_size = x_dim[2];
-      index_size = x_dim[2];
+      dim_size = x_dim[0] * x_dim[2];
+      for (int i = 0; i < dim_size; i++) {
+        dst[i] = 0.0;
+      }
       break;
     case 2:
-      iterations[0] = x_dim[0];
-      iterations[1] = x_dim[1];
-      iterations[2] = x_dim[2];
-      i_size = x_dim[1] * x_dim[2];
-      j_size = x_dim[2];
-      k_size = 1;
-      index_size = x_dim[1];
+      dim_size = x_dim[0] * x_dim[1];
+      for (int i = 0; i < dim_size; i++) {
+        dst[i] = 0.0;
+      }
       break;
   }
-  int data_index, src_index0, src_index;
-  for (int i = 0; i < iterations[0]; i++) {
-    for (int j = 0; j < iterations[1]; j++) {
-      data_index = i * index_size + j;
-      dst[data_index] = 0.0;
-      src_index0 = i * i_size + j * j_size;
-      for (int k = 0; k < iterations[2]; k++) {
-        src_index = src_index0 + k * k_size;
-        dst[data_index] += static_cast<float>(src[src_index]);
+  // int dim_size = x_dim[0] * x_dim[1] * x_dim[2];
+  // for (int i = 0; i < dim_size;i++){ dst[i] = 0.0;}
+  for (int i = 0; i < x_dim[0]; i++) {
+    for (int j = 0; j < x_dim[1]; j++) {
+      for (int k = 0; k < x_dim[2]; k++) {
+        int src_index = i * x_dim[1] * x_dim[2] + j * x_dim[2] + k;
+        int dst_index = i * reduce_dim[1] * reduce_dim[2] * reduce_b[0] +
+                        j * reduce_dim[2] * reduce_b[1] + k * reduce_b[2];
+        dst[dst_index] += static_cast<float>(src[src_index]);
       }
     }
   }
@@ -394,9 +432,9 @@ void test_reduce_sum(Place place) {
   }
   std::vector<std::vector<int>> reduce_dimm{{0}, {1}, {2}};
   for (auto dim : reduce_dimm) {
-    for (auto c : {1, 3}) {
-      for (auto h : {1, 3}) {
-        for (auto w : {1, 4}) {
+    for (auto c : {2, 3}) {
+      for (auto h : {2, 3}) {
+        for (auto w : {2, 4}) {
           auto x_dims = DDim(std::vector<int64_t>({c, h, w}));
           std::unique_ptr<arena::TestCase> tester(new ReduceSumComputeTester(
               place, "def", dim, false, false, x_dims));
