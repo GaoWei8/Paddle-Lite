@@ -119,14 +119,16 @@ void reduce_sum_w(const float* src,
   }
 }
 
-void reduce_sum(const float* src, float* dst, DDim x_dim, int dims) {
+void reduce_sum(const float* src, float* dst, const DDim& x_dim, int dims) {
   int reduce_b[3] = {1, 1, 1};
   reduce_b[dims] = 0;
   DDim reduce_dim{x_dim};
   reduce_dim[dims] = 1;
   int dim_size = 1;
   for (int i = 0; i < 3; i++) {
-    if (i != dims) dim_size *= x_dim[i];
+    if (i != dims) {
+      dim_size *= x_dim[i];
+    }
   }
   for (int i = 0; i < dim_size; i++) {
     dst[i] = 0.0;
